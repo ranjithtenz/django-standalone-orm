@@ -1,4 +1,3 @@
-from django import forms
 from django.test import TestCase
 from django.core.exceptions import NON_FIELD_ERRORS
 from modeltests.validation import ValidationTestCase
@@ -63,52 +62,4 @@ class BaseModelValidationTests(ValidationTestCase):
     def test_text_greater_that_charfields_max_length_eaises_erros(self):
         mtv = ModelToValidate(number=10, name='Some Name'*100)
         self.assertFailsValidation(mtv.full_clean, ['name',])
-
-class ArticleForm(forms.ModelForm):
-    class Meta:
-        model = Article
-        exclude = ['author']
-
-class ModelFormsTests(TestCase):
-    def setUp(self):
-        self.author = Author.objects.create(name='Joseph Kocherhans')
-
-    def test_partial_validation(self):
-        # Make sure the "commit=False and set field values later" idiom still
-        # works with model validation.
-        data = {
-            'title': 'The state of model validation',
-            'pub_date': '2010-1-10 14:49:00'
-        }
-        form = ArticleForm(data)
-        self.assertEqual(form.errors.keys(), [])
-        article = form.save(commit=False)
-        article.author = self.author
-        article.save()
-
-    def test_validation_with_empty_blank_field(self):
-        # Since a value for pub_date wasn't provided and the field is
-        # blank=True, model-validation should pass.
-        # Also, Article.clean() should be run, so pub_date will be filled after
-        # validation, so the form should save cleanly even though pub_date is
-        # not allowed to be null.
-        data = {
-            'title': 'The state of model validation',
-        }
-        article = Article(author_id=self.author.id)
-        form = ArticleForm(data, instance=article)
-        self.assertEqual(form.errors.keys(), [])
-        self.assertNotEqual(form.instance.pub_date, None)
-        article = form.save()
-
-    def test_validation_with_invalid_blank_field(self):
-        # Even though pub_date is set to blank=True, an invalid value was
-        # provided, so it should fail validation.
-        data = {
-            'title': 'The state of model validation',
-            'pub_date': 'never'
-        }
-        article = Article(author_id=self.author.id)
-        form = ArticleForm(data, instance=article)
-        self.assertEqual(form.errors.keys(), ['pub_date'])
 
