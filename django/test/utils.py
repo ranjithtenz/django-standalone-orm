@@ -1,7 +1,5 @@
 import sys, time, os
 from django.conf import settings
-from django.core import mail
-from django.core.mail.backends import locmem
 from django.test import signals
 from django.utils.translation import deactivate
 
