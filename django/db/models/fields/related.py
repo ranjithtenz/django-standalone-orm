@@ -11,7 +11,6 @@ from django.utils.encoding import smart_unicode
 from django.utils.translation import ugettext_lazy as _, string_concat, ungettext, ugettext
 from django.utils.functional import curry
 from django.core import exceptions
-from django import forms
 
 
 RECURSIVE_RELATIONSHIP_CONSTANT = 'self'
@@ -844,16 +843,6 @@ class ForeignKey(RelatedField, Field):
         if self.rel.field_name is None:
             self.rel.field_name = cls._meta.pk.name
 
-    def formfield(self, **kwargs):
-        db = kwargs.pop('using', None)
-        defaults = {
-            'form_class': forms.ModelChoiceField,
-            'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to),
-            'to_field_name': self.rel.field_name,
-        }
-        defaults.update(kwargs)
-        return super(ForeignKey, self).formfield(**defaults)
-
     def db_type(self, connection):
         # The database column type of a ForeignKey is the column type
         # of the field to which it points. An exception is if the ForeignKey
@@ -884,11 +873,6 @@ class OneToOneField(ForeignKey):
     def contribute_to_related_class(self, cls, related):
         setattr(cls, related.get_accessor_name(),
                 SingleRelatedObjectDescriptor(related))
-
-    def formfield(self, **kwargs):
-        if self.rel.parent_link:
-            return None
-        return super(OneToOneField, self).formfield(**kwargs)
 
     def save_form_data(self, instance, data):
         if isinstance(data, self.rel.to):
@@ -1097,22 +1081,6 @@ class ManyToManyField(RelatedField, Field):
 
     def save_form_data(self, instance, data):
         setattr(instance, self.attname, data)
-
-    def formfield(self, **kwargs):
-        db = kwargs.pop('using', None)
-        defaults = {
-            'form_class': forms.ModelMultipleChoiceField,
-            'queryset': self.rel.to._default_manager.using(db).complex_filter(self.rel.limit_choices_to)
-        }
-        defaults.update(kwargs)
-        # If initial is passed in, it's a list of related objects, but the
-        # MultipleChoiceField takes a list of IDs.
-        if defaults.get('initial') is not None:
-            initial = defaults['initial']
-            if callable(initial):
-                initial = initial()
-            defaults['initial'] = [i._get_pk_val() for i in initial]
-        return super(ManyToManyField, self).formfield(**defaults)
 
     def db_type(self, connection):
         # A ManyToManyField is not represented by a single column,

@@ -9,7 +9,6 @@ from django.db import connection
 from django.db.models.fields.subclassing import LegacyConnection
 from django.db.models.query_utils import QueryWrapper
 from django.conf import settings
-from django import forms
 from django.core import exceptions, validators
 from django.utils.datastructures import DictWrapper
 from django.utils.functional import curry
@@ -441,32 +440,6 @@ class Field(object):
     def save_form_data(self, instance, data):
         setattr(instance, self.name, data)
 
-    def formfield(self, form_class=forms.CharField, **kwargs):
-        "Returns a django.forms.Field instance for this database Field."
-        defaults = {'required': not self.blank, 'label': capfirst(self.verbose_name), 'help_text': self.help_text}
-        if self.has_default():
-            defaults['initial'] = self.get_default()
-            if callable(self.default):
-                defaults['show_hidden_initial'] = True
-        if self.choices:
-            # Fields with choices get special treatment.
-            include_blank = self.blank or not (self.has_default() or 'initial' in kwargs)
-            defaults['choices'] = self.get_choices(include_blank=include_blank)
-            defaults['coerce'] = self.to_python
-            if self.null:
-                defaults['empty_value'] = None
-            form_class = forms.TypedChoiceField
-            # Many of the subclass-specific formfield arguments (min_value,
-            # max_value) don't apply for choice fields, so be sure to only pass
-            # the values that TypedChoiceField will understand.
-            for k in kwargs.keys():
-                if k not in ('coerce', 'empty_value', 'choices', 'required',
-                             'widget', 'label', 'initial', 'help_text',
-                             'error_messages'):
-                    del kwargs[k]
-        defaults.update(kwargs)
-        return form_class(**defaults)
-
     def value_from_object(self, obj):
         "Returns the value of this field in the given model instance."
         return getattr(obj, self.attname)
@@ -505,9 +478,6 @@ class AutoField(Field):
         cls._meta.has_auto_field = True
         cls._meta.auto_field = self
 
-    def formfield(self, **kwargs):
-        return None
-
 class BooleanField(Field):
     empty_strings_allowed = False
     default_error_messages = {
@@ -543,17 +513,6 @@ class BooleanField(Field):
             return None
         return bool(value)
 
-    def formfield(self, **kwargs):
-        # Unlike most fields, BooleanField figures out include_blank from
-        # self.null instead of self.blank.
-        if self.choices:
-            include_blank = self.null or not (self.has_default() or 'initial' in kwargs)
-            defaults = {'choices': self.get_choices(include_blank=include_blank)}
-        else:
-            defaults = {'form_class': forms.BooleanField}
-        defaults.update(kwargs)
-        return super(BooleanField, self).formfield(**defaults)
-
 class CharField(Field):
     description = _("String (up to %(max_length)s)")
 
@@ -572,27 +531,10 @@ class CharField(Field):
     def get_prep_value(self, value):
         return self.to_python(value)
     
-    def formfield(self, **kwargs):
-        # Passing max_length to forms.CharField means that the value's length
-        # will be validated twice. This is considered acceptable since we want
-        # the value in the form field (to pass into widget for example).
-        defaults = {'max_length': self.max_length}
-        defaults.update(kwargs)
-        return super(CharField, self).formfield(**defaults)
-
 # TODO: Maybe move this into contrib, because it's specialized.
 class CommaSeparatedIntegerField(CharField):
     default_validators = [validators.validate_comma_separated_integer_list]
     description = _("Comma-separated integers")
-
-    def formfield(self, **kwargs):
-        defaults = {
-            'error_messages': {
-                'invalid': _(u'Enter only digits separated by commas.'),
-            }
-        }
-        defaults.update(kwargs)
-        return super(CommaSeparatedIntegerField, self).formfield(**defaults)
 
 ansi_date_re = re.compile(r'^\d{4}-\d{1,2}-\d{1,2}$')
 
@@ -676,11 +618,6 @@ class DateField(Field):
             data = datetime_safe.new_date(val).strftime("%Y-%m-%d")
         return data
 
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.DateField}
-        defaults.update(kwargs)
-        return super(DateField, self).formfield(**defaults)
-
 class DateTimeField(DateField):
     default_error_messages = {
         'invalid': _(u'Enter a valid date/time in YYYY-MM-DD HH:MM[:ss[.uuuuuu]] format.'),
@@ -743,10 +680,6 @@ class DateTimeField(DateField):
             data = d.strftime('%Y-%m-%d %H:%M:%S')
         return data
 
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.DateTimeField}
-        defaults.update(kwargs)
-        return super(DateTimeField, self).formfield(**defaults)
 
 class DecimalField(Field):
     empty_strings_allowed = False
@@ -797,14 +730,6 @@ class DecimalField(Field):
     def get_prep_value(self, value):
         return self.to_python(value)
 
-    def formfield(self, **kwargs):
-        defaults = {
-            'max_digits': self.max_digits,
-            'decimal_places': self.decimal_places,
-            'form_class': forms.DecimalField,
-        }
-        defaults.update(kwargs)
-        return super(DecimalField, self).formfield(**defaults)
 
 class EmailField(CharField):
     default_validators = [validators.validate_email]
@@ -821,16 +746,6 @@ class FilePathField(Field):
         self.path, self.match, self.recursive = path, match, recursive
         kwargs['max_length'] = kwargs.get('max_length', 100)
         Field.__init__(self, verbose_name, name, **kwargs)
-
-    def formfield(self, **kwargs):
-        defaults = {
-            'path': self.path,
-            'match': self.match,
-            'recursive': self.recursive,
-            'form_class': forms.FilePathField,
-        }
-        defaults.update(kwargs)
-        return super(FilePathField, self).formfield(**defaults)
 
     def get_internal_type(self):
         return "FilePathField"
@@ -858,11 +773,6 @@ class FloatField(Field):
         except (TypeError, ValueError):
             raise exceptions.ValidationError(self.error_messages['invalid'])
 
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.FloatField}
-        defaults.update(kwargs)
-        return super(FloatField, self).formfield(**defaults)
-
 class IntegerField(Field):
     empty_strings_allowed = False
     default_error_messages = {
@@ -886,23 +796,12 @@ class IntegerField(Field):
         except (TypeError, ValueError):
             raise exceptions.ValidationError(self.error_messages['invalid'])
 
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.IntegerField}
-        defaults.update(kwargs)
-        return super(IntegerField, self).formfield(**defaults)
-
 class BigIntegerField(IntegerField):
     empty_strings_allowed = False
     description = _("Big (8 byte) integer")
     MAX_BIGINT = 9223372036854775807
     def get_internal_type(self):
         return "BigIntegerField"
-
-    def formfield(self, **kwargs):
-        defaults = {'min_value': -BigIntegerField.MAX_BIGINT - 1,
-                    'max_value': BigIntegerField.MAX_BIGINT}
-        defaults.update(kwargs)
-        return super(BigIntegerField, self).formfield(**defaults)
 
 class IPAddressField(Field):
     empty_strings_allowed = False
@@ -913,11 +812,6 @@ class IPAddressField(Field):
 
     def get_internal_type(self):
         return "IPAddressField"
-
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.IPAddressField}
-        defaults.update(kwargs)
-        return super(IPAddressField, self).formfield(**defaults)
 
 class NullBooleanField(Field):
     empty_strings_allowed = False
@@ -954,35 +848,16 @@ class NullBooleanField(Field):
             return None
         return bool(value)
 
-    def formfield(self, **kwargs):
-        defaults = {
-            'form_class': forms.NullBooleanField,
-            'required': not self.blank,
-            'label': capfirst(self.verbose_name),
-            'help_text': self.help_text}
-        defaults.update(kwargs)
-        return super(NullBooleanField, self).formfield(**defaults)
-
 class PositiveIntegerField(IntegerField):
     description = _("Integer")
 
     def get_internal_type(self):
         return "PositiveIntegerField"
 
-    def formfield(self, **kwargs):
-        defaults = {'min_value': 0}
-        defaults.update(kwargs)
-        return super(PositiveIntegerField, self).formfield(**defaults)
-
 class PositiveSmallIntegerField(IntegerField):
     description = _("Integer")
     def get_internal_type(self):
         return "PositiveSmallIntegerField"
-
-    def formfield(self, **kwargs):
-        defaults = {'min_value': 0}
-        defaults.update(kwargs)
-        return super(PositiveSmallIntegerField, self).formfield(**defaults)
 
 class SlugField(CharField):
     description = _("String (up to %(max_length)s)")
@@ -995,11 +870,6 @@ class SlugField(CharField):
 
     def get_internal_type(self):
         return "SlugField"
-
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.SlugField}
-        defaults.update(kwargs)
-        return super(SlugField, self).formfield(**defaults)
 
 class SmallIntegerField(IntegerField):
     description = _("Integer")
@@ -1017,11 +887,6 @@ class TextField(Field):
         if isinstance(value, basestring) or value is None:
             return value
         return smart_unicode(value)
-
-    def formfield(self, **kwargs):
-        defaults = {'widget': forms.Textarea}
-        defaults.update(kwargs)
-        return super(TextField, self).formfield(**defaults)
 
 class TimeField(Field):
     description = _("Time")
@@ -1097,11 +962,6 @@ class TimeField(Field):
         else:
             data = val.strftime("%H:%M:%S")
         return data
-
-    def formfield(self, **kwargs):
-        defaults = {'form_class': forms.TimeField}
-        defaults.update(kwargs)
-        return super(TimeField, self).formfield(**defaults)
 
 class URLField(CharField):
     description = _("URL")
