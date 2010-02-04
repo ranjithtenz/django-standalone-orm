@@ -617,11 +617,6 @@ Bug #2076
 >>> len(qs.query.tables)
 1
 
-# Ordering of extra() pieces is possible, too and you can mix extra fields and
-# model fields in the ordering.
->>> Ranking.objects.extra(tables=['django_site'], order_by=['-django_site.id', 'rank'])
-[<Ranking: 1: a3>, <Ranking: 2: a2>, <Ranking: 3: a1>]
-
 >>> qs = Ranking.objects.extra(select={'good': 'case when rank > 2 then 1 else 0 end'})
 >>> [o.good for o in qs.extra(order_by=('-good',))] == [True, False, False]
 True
@@ -820,11 +815,6 @@ We can do slicing beyond what is currently in the result cache, too.
 ## Traceback (most recent call last):
 ## ...
 ## IndexError: ...
-
-Bug #7045 -- extra tables used to crash SQL construction on the second use.
->>> qs = Ranking.objects.extra(tables=['django_site'])
->>> s = qs.query.get_compiler(qs.db).as_sql()
->>> s = qs.query.get_compiler(qs.db).as_sql()   # test passes if this doesn't raise an exception.
 
 Bug #7098 -- Make sure semi-deprecated ordering by related models syntax still
 works.

@@ -119,23 +119,6 @@ u'c1'
 >>> results[0].second_child.name
 u'c2'
 
-# Test for #12163 - Pickling error saving session with unsaved model instances.
->>> from django.contrib.sessions.backends.db import SessionStore
->>> SESSION_KEY = '2b1189a188b44ad18c35e1baac6ceead'
->>> item = Item()
->>> item._deferred
-False
->>> s = SessionStore(SESSION_KEY)
->>> s.clear()
->>> s['item'] = item
->>> s.save()
->>> s = SessionStore(SESSION_KEY)
->>> s.modified = True
->>> s.save()
->>> i2 = s['item']
->>> i2._deferred # Item must still be non-deferred
-False
-
 # Regression for #11936 - loading.get_models should not return deferred models by default.
 >>> from django.db.models.loading import get_models
 >>> sorted(get_models(models.get_app('defer_regress')), key=lambda obj: obj._meta.object_name)
