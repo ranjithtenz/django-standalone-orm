@@ -217,7 +217,6 @@ class TransactionTestCase(unittest.TestCase):
             * Clearing the mail test outbox.
         """
         self._fixture_setup()
-        mail.outbox = []
 
     def _fixture_setup(self):
         # If the test case has a multi_db=True flag, flush all databases.
