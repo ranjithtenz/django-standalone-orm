@@ -4,13 +4,9 @@ from urlparse import urlsplit, urlunsplit
 from xml.dom.minidom import parseString, Node
 
 from django.conf import settings
-from django.core import mail
 from django.core.management import call_command
-from django.core.urlresolvers import clear_url_caches
 from django.db import transaction, connections, DEFAULT_DB_ALIAS
-from django.http import QueryDict
 from django.test import _doctest as doctest
-from django.test.client import Client
 from django.utils import simplejson
 from django.utils.encoding import smart_str
 
@@ -221,7 +217,6 @@ class TransactionTestCase(unittest.TestCase):
             * Clearing the mail test outbox.
         """
         self._fixture_setup()
-        self._urlconf_setup()
         mail.outbox = []
 
     def _fixture_setup(self):
@@ -239,19 +234,13 @@ class TransactionTestCase(unittest.TestCase):
                 # that we're using *args and **kwargs together.
                 call_command('loaddata', *self.fixtures, **{'verbosity': 0, 'database': db})
 
-    def _urlconf_setup(self):
-        if hasattr(self, 'urls'):
-            self._old_root_urlconf = settings.ROOT_URLCONF
-            settings.ROOT_URLCONF = self.urls
-            clear_url_caches()
-
     def __call__(self, result=None):
         """
         Wrapper around default __call__ method to perform common Django test
         set up. This means that user-defined Test Cases aren't required to
         include a call to super().setUp().
         """
-        self.client = Client()
+
         try:
             self._pre_setup()
         except (KeyboardInterrupt, SystemExit):
@@ -276,195 +265,11 @@ class TransactionTestCase(unittest.TestCase):
             * Putting back the original ROOT_URLCONF if it was changed.
         """
         self._fixture_teardown()
-        self._urlconf_teardown()
 
     def _fixture_teardown(self):
         pass
 
-    def _urlconf_teardown(self):
-        if hasattr(self, '_old_root_urlconf'):
-            settings.ROOT_URLCONF = self._old_root_urlconf
-            clear_url_caches()
 
-    def assertRedirects(self, response, expected_url, status_code=302,
-                        target_status_code=200, host=None, msg_prefix=''):
-        """Asserts that a response redirected to a specific URL, and that the
-        redirect URL can be loaded.
-
-        Note that assertRedirects won't work for external links since it uses
-        TestClient to do a request.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        if hasattr(response, 'redirect_chain'):
-            # The request was a followed redirect
-            self.failUnless(len(response.redirect_chain) > 0,
-                msg_prefix + "Response didn't redirect as expected: Response"
-                " code was %d (expected %d)" %
-                    (response.status_code, status_code))
-
-            self.assertEqual(response.redirect_chain[0][1], status_code,
-                msg_prefix + "Initial response didn't redirect as expected:"
-                " Response code was %d (expected %d)" %
-                    (response.redirect_chain[0][1], status_code))
-
-            url, status_code = response.redirect_chain[-1]
-
-            self.assertEqual(response.status_code, target_status_code,
-                msg_prefix + "Response didn't redirect as expected: Final"
-                " Response code was %d (expected %d)" %
-                    (response.status_code, target_status_code))
-
-        else:
-            # Not a followed redirect
-            self.assertEqual(response.status_code, status_code,
-                msg_prefix + "Response didn't redirect as expected: Response"
-                " code was %d (expected %d)" %
-                    (response.status_code, status_code))
-
-            url = response['Location']
-            scheme, netloc, path, query, fragment = urlsplit(url)
-
-            redirect_response = response.client.get(path, QueryDict(query))
-
-            # Get the redirection page, using the same client that was used
-            # to obtain the original response.
-            self.assertEqual(redirect_response.status_code, target_status_code,
-                msg_prefix + "Couldn't retrieve redirection page '%s':"
-                " response code was %d (expected %d)" %
-                    (path, redirect_response.status_code, target_status_code))
-
-        e_scheme, e_netloc, e_path, e_query, e_fragment = urlsplit(expected_url)
-        if not (e_scheme or e_netloc):
-            expected_url = urlunsplit(('http', host or 'testserver', e_path,
-                e_query, e_fragment))
-
-        self.assertEqual(url, expected_url,
-            msg_prefix + "Response redirected to '%s', expected '%s'" %
-                (url, expected_url))
-
-    def assertContains(self, response, text, count=None, status_code=200,
-                       msg_prefix=''):
-        """
-        Asserts that a response indicates that a page was retrieved
-        successfully, (i.e., the HTTP status code was as expected), and that
-        ``text`` occurs ``count`` times in the content of the response.
-        If ``count`` is None, the count doesn't matter - the assertion is true
-        if the text occurs at least once in the response.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        self.assertEqual(response.status_code, status_code,
-            msg_prefix + "Couldn't retrieve page: Response code was %d"
-            " (expected %d)" % (response.status_code, status_code))
-        text = smart_str(text, response._charset)
-        real_count = response.content.count(text)
-        if count is not None:
-            self.assertEqual(real_count, count,
-                msg_prefix + "Found %d instances of '%s' in response"
-                " (expected %d)" % (real_count, text, count))
-        else:
-            self.failUnless(real_count != 0,
-                msg_prefix + "Couldn't find '%s' in response" % text)
-
-    def assertNotContains(self, response, text, status_code=200,
-                          msg_prefix=''):
-        """
-        Asserts that a response indicates that a page was retrieved
-        successfully, (i.e., the HTTP status code was as expected), and that
-        ``text`` doesn't occurs in the content of the response.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        self.assertEqual(response.status_code, status_code,
-            msg_prefix + "Couldn't retrieve page: Response code was %d"
-            " (expected %d)" % (response.status_code, status_code))
-        text = smart_str(text, response._charset)
-        self.assertEqual(response.content.count(text), 0,
-            msg_prefix + "Response should not contain '%s'" % text)
-
-    def assertFormError(self, response, form, field, errors, msg_prefix=''):
-        """
-        Asserts that a form used to render the response has a specific field
-        error.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        # Put context(s) into a list to simplify processing.
-        contexts = to_list(response.context)
-        if not contexts:
-            self.fail(msg_prefix + "Response did not use any contexts to"
-                      "render the response")
-
-        # Put error(s) into a list to simplify processing.
-        errors = to_list(errors)
-
-        # Search all contexts for the error.
-        found_form = False
-        for i,context in enumerate(contexts):
-            if form not in context:
-                continue
-            found_form = True
-            for err in errors:
-                if field:
-                    if field in context[form].errors:
-                        field_errors = context[form].errors[field]
-                        self.failUnless(err in field_errors,
-                            msg_prefix + "The field '%s' on form '%s' in"
-                            " context %d does not contain the error '%s'"
-                            " (actual errors: %s)" %
-                                (field, form, i, err, repr(field_errors)))
-                    elif field in context[form].fields:
-                        self.fail(msg_prefix + "The field '%s' on form '%s'"
-                                  " in context %d contains no errors" %
-                                      (field, form, i))
-                    else:
-                        self.fail(msg_prefix + "The form '%s' in context %d"
-                                  " does not contain the field '%s'" %
-                                      (form, i, field))
-                else:
-                    non_field_errors = context[form].non_field_errors()
-                    self.failUnless(err in non_field_errors,
-                        msg_prefix + "The form '%s' in context %d does not"
-                        " contain the non-field error '%s'"
-                        " (actual errors: %s)" %
-                            (form, i, err, non_field_errors))
-        if not found_form:
-            self.fail(msg_prefix + "The form '%s' was not used to render the"
-                      " response" % form)
-
-    def assertTemplateUsed(self, response, template_name, msg_prefix=''):
-        """
-        Asserts that the template with the provided name was used in rendering
-        the response.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        template_names = [t.name for t in to_list(response.template)]
-        if not template_names:
-            self.fail(msg_prefix + "No templates used to render the response")
-        self.failUnless(template_name in template_names,
-            msg_prefix + "Template '%s' was not a template used to render"
-            " the response. Actual template(s) used: %s" %
-                (template_name, u', '.join(template_names)))
-
-    def assertTemplateNotUsed(self, response, template_name, msg_prefix=''):
-        """
-        Asserts that the template with the provided name was NOT used in
-        rendering the response.
-        """
-        if msg_prefix:
-            msg_prefix += ": "
-
-        template_names = [t.name for t in to_list(response.template)]
-        self.failIf(template_name in template_names,
-            msg_prefix + "Template '%s' was used unexpectedly in rendering"
-            " the response" % template_name)
 
 def connections_support_transactions():
     """

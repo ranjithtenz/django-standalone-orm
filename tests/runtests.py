@@ -3,39 +3,23 @@
 import os, sys, traceback
 import unittest
 
-import django.contrib as contrib
-
 try:
     set
 except NameError:
     from sets import Set as set     # For Python 2.3
 
 
-CONTRIB_DIR_NAME = 'django.contrib'
+
 MODEL_TESTS_DIR_NAME = 'modeltests'
 REGRESSION_TESTS_DIR_NAME = 'regressiontests'
 
-TEST_TEMPLATE_DIR = 'templates'
 
-CONTRIB_DIR = os.path.dirname(contrib.__file__)
 MODEL_TEST_DIR = os.path.join(os.path.dirname(__file__), MODEL_TESTS_DIR_NAME)
 REGRESSION_TEST_DIR = os.path.join(os.path.dirname(__file__), REGRESSION_TESTS_DIR_NAME)
 
-ALWAYS_INSTALLED_APPS = [
-    'django.contrib.contenttypes',
-    'django.contrib.auth',
-    'django.contrib.sites',
-    'django.contrib.flatpages',
-    'django.contrib.redirects',
-    'django.contrib.sessions',
-    'django.contrib.messages',
-    'django.contrib.comments',
-    'django.contrib.admin',
-]
-
 def get_test_models():
     models = []
-    for loc, dirpath in (MODEL_TESTS_DIR_NAME, MODEL_TEST_DIR), (REGRESSION_TESTS_DIR_NAME, REGRESSION_TEST_DIR), (CONTRIB_DIR_NAME, CONTRIB_DIR):
+    for loc, dirpath in (MODEL_TESTS_DIR_NAME, MODEL_TEST_DIR), :#, (REGRESSION_TESTS_DIR_NAME, REGRESSION_TEST_DIR):
         for f in os.listdir(dirpath):
             if f.startswith('__init__') or f.startswith('.') or f.startswith('sql') or f.startswith('invalid'):
                 continue
@@ -44,7 +28,7 @@ def get_test_models():
 
 def get_invalid_models():
     models = []
-    for loc, dirpath in (MODEL_TESTS_DIR_NAME, MODEL_TEST_DIR), (REGRESSION_TESTS_DIR_NAME, REGRESSION_TEST_DIR), (CONTRIB_DIR_NAME, CONTRIB_DIR):
+    for loc, dirpath in (MODEL_TESTS_DIR_NAME, MODEL_TEST_DIR), :# (REGRESSION_TESTS_DIR_NAME, REGRESSION_TEST_DIR):
         for f in os.listdir(dirpath):
             if f.startswith('__init__') or f.startswith('.') or f.startswith('sql'):
                 continue
@@ -97,25 +81,6 @@ def django_tests(verbosity, interactive, failfast, test_labels):
     old_language_code = settings.LANGUAGE_CODE
     old_middleware_classes = settings.MIDDLEWARE_CLASSES
 
-    # Redirect some settings for the duration of these tests.
-    settings.INSTALLED_APPS = ALWAYS_INSTALLED_APPS
-    settings.ROOT_URLCONF = 'urls'
-    settings.TEMPLATE_DIRS = (os.path.join(os.path.dirname(__file__), TEST_TEMPLATE_DIR),)
-    settings.USE_I18N = True
-    settings.LANGUAGE_CODE = 'en'
-    settings.LOGIN_URL = '/accounts/login/'
-    settings.MIDDLEWARE_CLASSES = (
-        'django.contrib.sessions.middleware.SessionMiddleware',
-        'django.contrib.auth.middleware.AuthenticationMiddleware',
-        'django.contrib.messages.middleware.MessageMiddleware',
-        'django.middleware.common.CommonMiddleware',
-    )
-    settings.SITE_ID = 1
-    # For testing comment-utils, we require the MANAGERS attribute
-    # to be set, so that a test email is sent out which we catch
-    # in our tests.
-    settings.MANAGERS = ("admin@djangoproject.com",)
-
     # Load all the ALWAYS_INSTALLED_APPS.
     # (This import statement is intentionally delayed until after we
     # access settings because of the USE_I18N dependency.)
@@ -154,10 +119,8 @@ def django_tests(verbosity, interactive, failfast, test_labels):
                 pass
 
     # Run the test suite, including the extra validation tests.
-    from django.test.utils import get_runner
-    if not hasattr(settings, 'TEST_RUNNER'):
-        settings.TEST_RUNNER = 'django.test.simple.DjangoTestSuiteRunner'
-    TestRunner = get_runner(settings)
+    from django.test.simple import DjangoTestSuiteRunner
+    TestRunner = DjangoTestSuiteRunner
 
     if hasattr(TestRunner, 'func_name'):
         # Pre 1.2 test runners were just functions,
