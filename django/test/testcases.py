@@ -302,9 +302,6 @@ class TestCase(TransactionTestCase):
             transaction.managed(True, using=db)
         disable_transaction_methods()
 
-        from django.contrib.sites.models import Site
-        Site.objects.clear_cache()
-
         for db in databases:
             if hasattr(self, 'fixtures'):
                 call_command('loaddata', *self.fixtures, **{
