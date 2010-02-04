@@ -12,7 +12,6 @@ import datastructures
 import itercompat
 import tzinfo
 
-from decorators import DecoratorFromMiddlewareTests
 from functional import FunctionalTestCase
 
 # We need this because "datastructures" uses sorted() and the tests are run in
