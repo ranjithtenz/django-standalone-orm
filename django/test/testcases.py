@@ -269,7 +269,6 @@ class TransactionTestCase(unittest.TestCase):
         pass
 
 
-
 def connections_support_transactions():
     """
     Returns True if all connections support transactions.  This is messy
